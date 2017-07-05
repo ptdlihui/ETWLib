@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 2.8)
+project(ETWLibExample)
+add_subdirectory(ETWLib)
+include_directories(./ETWLib)
+add_executable(ETWLibExample example.cpp)
+target_link_libraries(ETWLibExample ETWLib)
+target_link_libraries(ETWLibExample tdh.lib)

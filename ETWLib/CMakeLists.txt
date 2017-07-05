@@ -1,0 +1,1 @@
+add_library(ETWLib STATIC "etwlib.h" "etwlib.cpp" "etwcons.h" "etwproviders.cpp" "etwproviders.h")
