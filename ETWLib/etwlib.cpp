@@ -78,30 +78,44 @@ BOOL SetPrivilege(
 
 namespace ETWLib
 {
-    void GrantPrivilegeW(const wchar_t** privileges, int count)
+	std::vector<std::wstring> GetUserProvidersName() 
+	{
+		return Providers.AllProviders_Name();
+	}
+	bool GrantPrivilegeW(const wchar_t** privileges, int count)
     {
         if (count < 1)
-            return;
+            return false;
 
         HANDLE thisProcessToken;
         if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &thisProcessToken))
         {
             for (int i = 0; i < count; i++)
                 SetPrivilege<wchar_t>(thisProcessToken, privileges[i], TRUE);
+			return true;
         }
+		else 
+		{
+			return false;
+		}
     }
 
-    void GrantPrivilegeA(const char** privileges, int count)
+    bool GrantPrivilegeA(const char** privileges, int count)
     {
         if (count < 1)
-            return;
+            return false;
 
         HANDLE thisProcessToken;
         if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &thisProcessToken))
         {
             for (int i = 0; i < count; i++)
                 SetPrivilege<char>(thisProcessToken, privileges[i], TRUE);
+			return true;
         }
+		else 
+		{
+			return false;
+		}
     }
 
     SessionParameters::SessionParameters()
@@ -115,12 +129,40 @@ namespace ETWLib
         KernelModeProviders.push_back({ Providers.KernelModeProvider(provider), eventid, stack});
     }
 
+	void 
+	SessionParameters::EraseKernelModeProvider(KernelModeProviderFlag provider) 
+	{
+		for (auto itor = KernelModeProviders.begin(); itor != KernelModeProviders.end(); ++itor) 
+		{
+			if (itor->guid == Providers.KernelModeProvider(provider))
+			{
+				KernelModeProviders.erase(itor);
+			}
+		}
+	}
+
     void
     SessionParameters::AddUserModeProvider(std::wstring name, bool stack)
     {
         UserModeProviders.push_back({ Providers.UserModeProvider(name), 0, stack });
     }
 
+	void 
+	SessionParameters::EraseUserModeProvider(std::wstring name) 
+	{
+		auto itor = UserModeProviders.begin();
+		while (itor != UserModeProviders.end()) 
+		{
+			if (itor->guid == Providers.UserModeProvider(name))
+			{
+				itor = UserModeProviders.erase(itor);
+			}
+			else 
+			{
+				++itor;
+			}
+		}
+	}
 
     void
     SessionParameters::EnableProfilling(bool enabled)

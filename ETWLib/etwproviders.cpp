@@ -60,4 +60,14 @@ namespace ETWLib
 
         return GUID();
     }
+
+	std::vector<std::wstring> ETWProviders::AllProviders_Name() 
+	{
+		std::vector<std::wstring> allproviders_name;
+		for(auto itor = m_name2Guid.begin();itor != m_name2Guid.end();++itor)
+		{
+			allproviders_name.push_back(itor->first);
+		}
+		return allproviders_name;
+	}
 };

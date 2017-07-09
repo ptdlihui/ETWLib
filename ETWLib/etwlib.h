@@ -8,9 +8,9 @@
 
 namespace ETWLib
 {
-    void GrantPrivilegeA(const char** privileges, int count);
-    void GrantPrivilegeW(const wchar_t** privileges, int count);
-
+    bool GrantPrivilegeA(const char** privileges, int count);
+    bool GrantPrivilegeW(const wchar_t** privileges, int count);
+	std::vector<std::wstring> GetUserProvidersName();
     enum TraceMode
     {
         LogFileMode = 0x1,
@@ -47,9 +47,12 @@ namespace ETWLib
     {
         SessionParameters();
         void EnableProfilling(bool profillingEnable);
-        void AddKernelModeProvider(KernelModeProviderFlag, unsigned char eventid, bool stack);
-        void AddUserModeProvider(std::wstring, bool stack);
+		void AddKernelModeProvider(KernelModeProviderFlag, unsigned char eventid, bool stack);
+		void EraseKernelModeProvider(KernelModeProviderFlag);
 
+        void AddUserModeProvider(std::wstring, bool stack);
+		void EraseUserModeProvider(std::wstring);
+		
         std::vector<ProviderEnableParameters> UserModeProviders;
         std::vector<ProviderEnableParameters> KernelModeProviders;
         ULONG EnableKernelFlags;

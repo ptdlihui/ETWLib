@@ -115,6 +115,8 @@ namespace ETWLib
 
         GUID UserModeProvider(std::wstring name);
         GUID KernelModeProvider(KernelModeProviderFlag kmpFlag);
+
+		std::vector<std::wstring> AllProviders_Name();
     protected:
         void init();
     protected:
