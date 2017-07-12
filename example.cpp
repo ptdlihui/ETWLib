@@ -17,11 +17,11 @@ int main()
 
 	ULONG status = session.StartSession(ETWLib::LogFileMode);
 	cout << status << endl;
-	/*for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 10; i++)
 	{
 		Sleep(1 * 1000);
 		printf("%d\n", i + 1);
-	}*/
+	}
 
 	session.CloseSession();
 
