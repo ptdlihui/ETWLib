@@ -417,4 +417,58 @@ namespace ETWLib
         assert(m_pImp);
         return m_pImp->closeSession();
     }
+
+
+    void ConvertPropertiesToInfo(PEVENT_TRACE_PROPERTIES pProperties, SessionInfo& info)
+    {
+        assert(pProperties);
+
+        info.BufferSize = pProperties->BufferSize;
+        info.MaxBuffers = pProperties->MaximumBuffers;
+        info.MinBuffers = pProperties->MinimumBuffers;
+        info.EnableKernelFlags = pProperties->EnableFlags;
+        info.MaxETLFileSize = pProperties->MaximumFileSize;
+
+        info.SessionName = std::wstring((const wchar_t*)((const char*)(pProperties) + pProperties->LoggerNameOffset));
+        info.LogFileName = std::wstring((const wchar_t*)((const char*)(pProperties) + pProperties->LogFileNameOffset));
+    }
+
+
+#define MAX_LOG_FILE_PATH_LENGTH 1024
+#define MAX_SESSION_NAME_LENGTH 256
+
+    void QueryAllSessions(std::vector<SessionInfo>& infos)
+    {
+        size_t propertySize = sizeof(EVENT_TRACE_PROPERTIES) + MAX_LOG_FILE_PATH_LENGTH + MAX_SESSION_NAME_LENGTH;
+        PEVENT_TRACE_PROPERTIES sessions[MAX_SESSION_COUNT];
+
+        std::vector<unsigned char> buffer;
+        buffer.resize(propertySize * MAX_SESSION_COUNT);
+
+        unsigned char* pHeader = buffer.data();
+        for (unsigned int i = 0; i < MAX_SESSION_COUNT; i++)
+        {
+            unsigned char* pCur = pHeader + i * propertySize;
+            PEVENT_TRACE_PROPERTIES pProperty = (PEVENT_TRACE_PROPERTIES)(pCur);
+            pProperty->Wnode.BufferSize = propertySize;
+            pProperty->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
+            pProperty->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME;
+            sessions[i] = pProperty;
+        }
+
+        ULONG sessionCount = 0;
+        ULONG status = ::QueryAllTracesW(sessions, MAX_SESSION_COUNT, &sessionCount);
+
+        if (status == ERROR_SUCCESS && sessionCount > 0)
+        {
+            for (unsigned int i = 0; i < sessionCount; i++)
+            {
+                SessionInfo info;
+                ConvertPropertiesToInfo(sessions[i], info);
+                infos.push_back(info);
+            }
+        }
+        else
+            infos.clear();
+    }
 }

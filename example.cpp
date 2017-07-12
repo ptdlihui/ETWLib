@@ -4,6 +4,8 @@ using namespace std;
 
 int main()
 {
+    std::vector<ETWLib::SessionInfo> infos;
+    ETWLib::QueryAllSessions(infos);
 	const char* privilege[1] = { SE_SYSTEM_PROFILE_NAME };
 	ETWLib::GrantPrivilegeA(privilege, 1);
 	ETWLib::SessionParameters params;
