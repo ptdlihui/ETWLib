@@ -2,153 +2,228 @@
 #include <iostream>
 #include <Qtcore/QCoreApplication>
 
-Test::Test(QWidget *parent): QWidget(parent)
+
+
+Test::Test(QWidget *parent) : QWidget(parent),session(NULL),param(NULL)
 {
-	//ui.setupUi(this);
+	allProvidersName = ETWLib::GetUserProvidersName();
 	grid = new QGridLayout;
-	QGridLayout *grid_start_end_save = new QGridLayout;
-	grid_start_end_save->addWidget(creatStartButton(), 0, 0);
-	grid_start_end_save->addWidget(creatEndButton(), 0, 1);
-	grid_start_end_save->addWidget(creatFileBUtton(), 0, 2);
-	grid->addLayout(grid_start_end_save, 0, 0);
-	grid->addWidget(creatFilter(), 0, 1);
-	
-	QScrollArea *scrollarea = new QScrollArea;
-	scrollarea->setWidget(creatProvides());
-	
-	grid->addWidget(scrollarea, 1, 0);
-	
+	QGridLayout *gridCom = new QGridLayout;
+	gridCom->addWidget(CreatStartButton(), 0, 0);
+	gridCom->addWidget(CreatEndButton(), 0, 1);
+	gridCom->addWidget(CreatSavePathButton(), 0, 2);
+	gridCom->addWidget(CreatSelectAllCheckBox(), 0, 3);
+	grid->addLayout(gridCom, 0, 0);
+	grid->addWidget(CreatFilterLineEdit(), 0, 1);
+	scrollAreaAllProvider = new QScrollArea;
+	scrollAreaAllProvider->setWidget(CreatProvidesGroupBox());
+	grid->addWidget(scrollAreaAllProvider, 1, 0);
 	grid->setColumnStretch(0, 1);
 	grid->setColumnStretch(1, 1);
-	
-
-	setLayout(grid);
-	setWindowTitle(tr("Test Version"));
+	this->setLayout(grid);
+	this->setWindowTitle(tr("Test Version"));
 	const wchar_t* privilege[1] = {SE_SYSTEM_PROFILE_NAME};
 	bool tokenValid = ETWLib::GrantPrivilegeW(privilege, 1);
-	
-	params = new ETWLib::SessionParameters();
-	params->EnableProfilling(true);
-
-	session = new ETWLib::ETWSession(L"TraceTest", L"Test.etl");
-	
-	resize(480, 320);
+	filePath = L"Test.etl";//if path not set,default path "Workspace\Test.etl" ,
+	this->resize(480, 320);
 }
 
-QPushButton* Test::creatStartButton() 
+QPushButton* Test::CreatStartButton() 
 {
-	QPushButton* start = new QPushButton(tr("Start"));
-	start->setChecked(true);
-	connect(start, SIGNAL(clicked()), this, SLOT(handleStart()));
+	start = new QPushButton(tr("Start"));
+	start->setCheckable(true);
+	start->setEnabled(true);
+	connect(start, SIGNAL(clicked()), this, SLOT(HandleStart()));
 	return start;
 }
 
-QPushButton* Test::creatEndButton()
+QPushButton* Test::CreatEndButton()
 {
-	QPushButton* end = new QPushButton(tr("End"));
+	end = new QPushButton(tr("End"));
 	end->setCheckable(true);
-	connect(end, SIGNAL(clicked()), this, SLOT(handleEnd()));	
+	end->setEnabled(false);
+	connect(end, SIGNAL(clicked()), this, SLOT(HandleEnd()));	
 	return end;
 }
 
-QPushButton* Test::creatFileBUtton() 
+QPushButton* Test::CreatSavePathButton() 
 {
-	QPushButton* path = new QPushButton(tr("Save file as"));
-	path->setCheckable(true);
-	connect(path, SIGNAL(clicked()), this, SLOT(handleFileSaving()));
-	return path;
+	save = new QPushButton(tr("savePath"));
+	save->setCheckable(true);
+	save->setEnabled(true);
+	connect(save, SIGNAL(clicked()), this, SLOT(HandleSave()));
+	return save;
 }
 
-QGroupBox* Test::creatProvides()
+QCheckBox* Test::CreatSelectAllCheckBox()
 {
-	QGroupBox *groupBox = new QGroupBox(tr("All Providers"));
-	groupBox->setFlat(true);
+	selcetAll = new QCheckBox(tr("SelectAll"));
+	selcetAll->setCheckable(true);
+	selcetAll->setChecked(false);
+	connect(selcetAll, SIGNAL(stateChanged(int)), this, SLOT(SeclectAllProviders(int)));
+	return selcetAll;
+}
 
-	std::vector<std::wstring> allproviders_name = ETWLib::GetUserProvidersName();
-	QVBoxLayout *vbox = new QVBoxLayout;
-	for (int i = 0; i < allproviders_name.size(); ++i) 
+QGroupBox* Test::CreatProvidesGroupBox()
+{
+	groupBoxAllProviders = new QGroupBox(tr("All Providers"));
+	groupBoxAllProviders->setFlat(true);
+	vBoxAllProviders = new QVBoxLayout;
+	for (int i = 0; i < allProvidersName.size(); i++)
 	{
-		const QString qprovider_str = QString::fromStdWString(allproviders_name[i]);
+		const QString qprovider_str = QString::fromStdWString(allProvidersName[i]);
 		QCheckBox *checkBox = new QCheckBox(qprovider_str);
-		connect(checkBox, SIGNAL(stateChanged(int)), this, SLOT(checkBoxClicked(int)));
-		vbox->addWidget(checkBox);
+		vecAllProviders.push_back(checkBox);
+		checkBox->setCheckState(Qt::Unchecked);
+		connect(checkBox, SIGNAL(stateChanged(int)), this, SLOT(CheckBoxClicked(int)));
+		vBoxAllProviders->addWidget(checkBox);
 	}
-	vbox->addStretch(1);
-	groupBox->setLayout(vbox);
-
-	return groupBox;
+	vBoxAllProviders->addStretch(1);
+	groupBoxAllProviders->setLayout(vBoxAllProviders);
+	return groupBoxAllProviders;
 }
 
-QLineEdit* Test::creatFilter() 
+QLineEdit* Test::CreatFilterLineEdit()
 {
-	QLineEdit *lineedit = new QLineEdit;
-	lineedit->setPlaceholderText("Search here!");
-	lineedit->setFocus();
-	connect(lineedit, SIGNAL(textEdited(const QString)), this, SLOT(handleFilter()));
-	return lineedit;
-}
-void Test::handleStart() 
-{
-	session->SetParameters(*params);
-	ULONG status = session->StartSession(ETWLib::LogFileMode);
-	std::cout << "already start" << std::endl;
+	filter = new QLineEdit;
+	filter->setPlaceholderText("Search here!");
+	connect(filter, SIGNAL(textEdited(const QString)), this, SLOT(HandleFilter()));
+	return filter;
 }
 
-void Test::handleEnd() 
+void Test::HandleStart() 
 {
-	for (int i = 0; i < 10; i++)
+	if (session == NULL) 
 	{
-		Sleep(1 * 100);
-		printf("%d\n", i + 1);
+		QMessageBox::information(this, tr("Hint"), tr("Set path first"));
+		return;
 	}
-	session->CloseSession();
+	ULONG status = session->StartSession(ETWLib::LogFileMode);
+	start->setEnabled(false);
+	end->setEnabled(true);
+	if (status == 0) 
+	{
+		QMessageBox::information(this, tr("Error"), tr("Start failed"));
+	}
 }
 
-void Test::handleFilter()
+void Test::HandleEnd() 
 {
-	QGroupBox* groupbox = new QGroupBox(tr("searching result after filter"));
-	groupbox->setFlat(true);
-	std::vector<std::wstring> allproviders_name = ETWLib::GetUserProvidersName();
+	session->CloseSession();
+	delete session;
+	delete param;
+	session = nullptr;
+	param = nullptr;
+	start->setEnabled(true);
+	end->setEnabled(false);
+}
+
+void Test::HandleFilter()
+{
+	vecAllFilterProviders.clear();
+	QGroupBox groupbox(tr("searching result after filter"));
+	groupbox.setFlat(true);
 	QObject* sender = QObject::sender();
 	QString filterqstr = ((QLineEdit*)sender)->text();
-	QVBoxLayout *vbox = new QVBoxLayout;
-	for (int i = 0; i < allproviders_name.size(); ++i) 
+	QVBoxLayout vbox;
+	QCheckBox selcetFilterAll("SelectFiltedAll");
+	connect(&selcetFilterAll, SIGNAL(stateChanged(int)), this, SLOT(SeclectAllFiltedProviders(int)));
+	vbox.addWidget(&selcetFilterAll);
+	scrollAreaAllProvider->hide();
+
+	QScrollArea* filterLeftProvidersScroll = new QScrollArea;
+	QVBoxLayout* filterLeftlayout = new QVBoxLayout;
+	QGroupBox* filterLeftBox = new QGroupBox;
+	for (int i = 0; i < allProvidersName.size(); ++i) 
 	{
-		QString providerqstr = QString::fromStdWString(allproviders_name[i]);
+		QString providerqstr = QString::fromStdWString(allProvidersName[i]);
 		if (providerqstr.contains(filterqstr, Qt::CaseInsensitive)) 
 		{
-			QCheckBox *checkBox = new QCheckBox(providerqstr);
-			connect(checkBox, SIGNAL(stateChanged(int)), this, SLOT(checkBoxClicked(int)));
-			vbox->addWidget(checkBox);
-		}	
+			vbox->addWidget(vecAllProviders[i]);
+			vecAllFilterProviders.push_back(vecAllProviders[i]);
+		}
+		else 
+		{			
+			filterLeftlayout->addWidget(vecAllProviders[i]);
+		}
 	}
 	vbox->addStretch(1);
 	groupbox->setLayout(vbox);
 	QScrollArea *scrollareafilter = new QScrollArea;
-	grid->addWidget(scrollareafilter, 1, 1);
 	scrollareafilter->setWidget(groupbox);
+	grid->addWidget(scrollareafilter, 1, 1);
+
+	filterLeftBox->setLayout(filterLeftlayout);
+	filterLeftProvidersScroll->setWidget(filterLeftBox);
+	grid->addWidget(filterLeftProvidersScroll, 1, 0);
+}
+		
+void Test::HandleSave()
+{	
+	QString fileName = QFileDialog::getSaveFileName(this, tr("Save path"), "", tr("*.etl"));
+	QObject* sender = QObject::sender();
+	((QPushButton*)sender)->setText(fileName);
+	QMessageBox::information(this, tr("FileSaving"), tr("Path already set"));
+	filePath = fileName.toStdWString();
+	if (session == NULL) //Make sure there is only one instance exist
+	{
+		session = new ETWLib::ETWSession(L"TraceTest", filePath);
+		param = new ETWLib::SessionParameters();
+	}
+	param->EnableProfilling(true);
+	session->SetParameters(*param);
 }
 
-void Test::handleFileSaving()
-{
-	QString fileName = QFileDialog::getSaveFileName(this, tr("Save File"),
-		"",
-		tr("File (*.txt)"));
-}
-void Test::checkBoxClicked(int state) 
+void Test::CheckBoxClicked(int state) 
 {
 	QObject* sender = QObject::sender();
-	std::string str = ((QCheckBox*)sender)->text().toStdString();
-	std::wstring wstr(str.length(), L' '); 
-	std::copy(str.begin(), str.end(), wstr.begin());//std::string to std::wstring	
-	//if (((QCheckBox*)sender)->isChecked())
+	std::wstring wstr = ((QCheckBox*)sender)->text().toStdWString();
 	if(state == Qt::Checked)
 	{
-		params->AddUserModeProvider(wstr, true);
+		param->AddUserModeProvider(wstr, true);
 	}
 	else
 	{
-		params->EraseUserModeProvider(wstr);
+		param->EraseUserModeProvider(wstr);
+	}	
+}
+
+void Test::SeclectAllProviders(int state) 
+{	
+	QObject* sender = QObject::sender();
+	std::wstring wstr = ((QCheckBox*)sender)->text().toStdWString();
+	if (state == Qt::Checked)
+	{
+		for (int i = 0; i < vecAllProviders.size(); ++i)
+		{
+			vecAllProviders[i]->setCheckState(Qt::Checked);
+		}
 	}
-	
+	else
+	{
+		for (int i = 0; i < vecAllProviders.size(); ++i)
+		{
+			vecAllProviders[i]->setCheckState(Qt::Unchecked);
+		}
+	}	
+}
+
+void Test::SeclectAllFiltedProviders(int state) 
+{
+	QObject* sender = QObject::sender();
+	std::wstring wstr = ((QCheckBox*)sender)->text().toStdWString();
+	if (state == Qt::Checked)
+	{
+		for (int i = 0; i < vecAllFilterProviders.size(); ++i)
+		{
+			vecAllFilterProviders[i]->setCheckState(Qt::Checked);
+		}
+	}
+	else
+	{
+		for (int i = 0; i < vecAllFilterProviders.size(); ++i)
+		{
+			vecAllFilterProviders[i]->setCheckState(Qt::Unchecked);
+		}
+	}
 }

@@ -19,8 +19,8 @@
 
 QT_BEGIN_MOC_NAMESPACE
 struct qt_meta_stringdata_Test_t {
-    QByteArrayData data[8];
-    char stringdata0[80];
+    QByteArrayData data[10];
+    char stringdata0[120];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -30,17 +30,20 @@ struct qt_meta_stringdata_Test_t {
 static const qt_meta_stringdata_Test_t qt_meta_stringdata_Test = {
     {
 QT_MOC_LITERAL(0, 0, 4), // "Test"
-QT_MOC_LITERAL(1, 5, 11), // "handleStart"
-QT_MOC_LITERAL(2, 17, 0), // ""
-QT_MOC_LITERAL(3, 18, 9), // "handleEnd"
-QT_MOC_LITERAL(4, 28, 15), // "checkBoxClicked"
-QT_MOC_LITERAL(5, 44, 5), // "state"
-QT_MOC_LITERAL(6, 50, 12), // "handleFilter"
-QT_MOC_LITERAL(7, 63, 16) // "handleFileSaving"
+QT_MOC_LITERAL(1, 5, 10), // "HandleSave"
+QT_MOC_LITERAL(2, 16, 0), // ""
+QT_MOC_LITERAL(3, 17, 11), // "HandleStart"
+QT_MOC_LITERAL(4, 29, 9), // "HandleEnd"
+QT_MOC_LITERAL(5, 39, 12), // "HandleFilter"
+QT_MOC_LITERAL(6, 52, 15), // "CheckBoxClicked"
+QT_MOC_LITERAL(7, 68, 5), // "state"
+QT_MOC_LITERAL(8, 74, 19), // "SeclectAllProviders"
+QT_MOC_LITERAL(9, 94, 25) // "SeclectAllFiltedProviders"
 
     },
-    "Test\0handleStart\0\0handleEnd\0checkBoxClicked\0"
-    "state\0handleFilter\0handleFileSaving"
+    "Test\0HandleSave\0\0HandleStart\0HandleEnd\0"
+    "HandleFilter\0CheckBoxClicked\0state\0"
+    "SeclectAllProviders\0SeclectAllFiltedProviders"
 };
 #undef QT_MOC_LITERAL
 
@@ -50,7 +53,7 @@ static const uint qt_meta_data_Test[] = {
        7,       // revision
        0,       // classname
        0,    0, // classinfo
-       5,   14, // methods
+       7,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -58,18 +61,22 @@ static const uint qt_meta_data_Test[] = {
        0,       // signalCount
 
  // slots: name, argc, parameters, tag, flags
-       1,    0,   39,    2, 0x08 /* Private */,
-       3,    0,   40,    2, 0x08 /* Private */,
-       4,    1,   41,    2, 0x08 /* Private */,
-       6,    0,   44,    2, 0x08 /* Private */,
-       7,    0,   45,    2, 0x08 /* Private */,
+       1,    0,   49,    2, 0x08 /* Private */,
+       3,    0,   50,    2, 0x08 /* Private */,
+       4,    0,   51,    2, 0x08 /* Private */,
+       5,    0,   52,    2, 0x08 /* Private */,
+       6,    1,   53,    2, 0x08 /* Private */,
+       8,    1,   56,    2, 0x08 /* Private */,
+       9,    1,   59,    2, 0x08 /* Private */,
 
  // slots: parameters
     QMetaType::Void,
     QMetaType::Void,
-    QMetaType::Void, QMetaType::Int,    5,
     QMetaType::Void,
     QMetaType::Void,
+    QMetaType::Void, QMetaType::Int,    7,
+    QMetaType::Void, QMetaType::Int,    7,
+    QMetaType::Void, QMetaType::Int,    7,
 
        0        // eod
 };
@@ -80,11 +87,13 @@ void Test::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void *
         Test *_t = static_cast<Test *>(_o);
         Q_UNUSED(_t)
         switch (_id) {
-        case 0: _t->handleStart(); break;
-        case 1: _t->handleEnd(); break;
-        case 2: _t->checkBoxClicked((*reinterpret_cast< int(*)>(_a[1]))); break;
-        case 3: _t->handleFilter(); break;
-        case 4: _t->handleFileSaving(); break;
+        case 0: _t->HandleSave(); break;
+        case 1: _t->HandleStart(); break;
+        case 2: _t->HandleEnd(); break;
+        case 3: _t->HandleFilter(); break;
+        case 4: _t->CheckBoxClicked((*reinterpret_cast< int(*)>(_a[1]))); break;
+        case 5: _t->SeclectAllProviders((*reinterpret_cast< int(*)>(_a[1]))); break;
+        case 6: _t->SeclectAllFiltedProviders((*reinterpret_cast< int(*)>(_a[1]))); break;
         default: ;
         }
     }
@@ -115,13 +124,13 @@ int Test::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 5)
+        if (_id < 7)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 5;
+        _id -= 7;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 5)
+        if (_id < 7)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 5;
+        _id -= 7;
     }
     return _id;
 }

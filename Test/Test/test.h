@@ -13,6 +13,7 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QMenuBar>
+#include <QtWidgets/QMessageBox>
 #include "ui_test.h"
 
 class Test : public QWidget
@@ -22,22 +23,36 @@ class Test : public QWidget
 public:
 	Test(QWidget *parent = 0);
 private slots:
-	void handleStart();
-	void handleEnd();
-	//void addUserModeProvider(std::wstring name, bool val);
-	void checkBoxClicked(int state);
-	void handleFilter();
-	void handleFileSaving();
+	void HandleSave();
+	void HandleStart();
+	void HandleEnd();
+	void HandleFilter();
+	void CheckBoxClicked(int state);
+	void SeclectAllProviders(int state);
+	void SeclectAllFiltedProviders(int state);
 private:
-	QGridLayout *grid;
-	QPushButton *creatStartButton();
-	QPushButton *creatEndButton();
-	QPushButton* creatFileBUtton();
-	QGroupBox *creatProvides();
-	QLineEdit *creatFilter();
-	ETWLib::SessionParameters* params;
+	std::vector<std::wstring> allProvidersName;
+	QPushButton *CreatStartButton();
+	QPushButton *CreatEndButton();
+	QPushButton* CreatSavePathButton();
+	QCheckBox *CreatSelectAllCheckBox();
+	QGroupBox *CreatProvidesGroupBox();
+	QLineEdit *CreatFilterLineEdit(); 
+	QCheckBox *selcetAll;
+	QScrollArea *scrollAreaAllProvider;
+	QVBoxLayout *vBoxAllProviders;
+	QGroupBox* groupBoxAllProviders;
+	QLineEdit* filter;
+	QGridLayout* grid;
+	QPushButton* start;
+	QPushButton* end;
+	QPushButton* save;
 	ETWLib::ETWSession* session;
-	Ui::TestClass ui;
+	ETWLib::SessionParameters* param;
+	std::vector<QCheckBox*> vecAllProviders;//1079
+	std::vector<QCheckBox*> vecAllFilterProviders;
+	std::wstring filePath;
+	//Ui::TestClass ui;
 };
 
 #endif // TEST_H
