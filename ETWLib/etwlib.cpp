@@ -6,6 +6,7 @@
 #include <strsafe.h>
 
 #define MAX_SESSION_NAME 1024
+#define MAX_LOG_FILE_PATH_LENGTH 1024
 
 static ETWLib::ETWProviders Providers;
 
@@ -267,6 +268,19 @@ namespace ETWLib
 
         bool startSession(TraceMode mode)
         {
+            ULONG status = startSessionImp(mode);
+            return status == ERROR_SUCCESS;
+        }
+
+        bool closeSession()
+        {
+            ULONG status = closeTrace();
+            return status == ERROR_SUCCESS;
+        }
+
+    protected:
+        ULONG startSessionImp(TraceMode mode)
+        {
             if (m_context.m_traceHandle != 0)
                 return false;
 
@@ -286,14 +300,6 @@ namespace ETWLib
 
             return true;
         }
-
-        bool closeSession()
-        {
-            ULONG status = closeTrace();
-            return status == ERROR_SUCCESS;
-        }
-
-    protected:
         ULONG startTrace()
         {
             PEVENT_TRACE_PROPERTIES pTraceProperties = m_context.etwProperties();
@@ -418,7 +424,6 @@ namespace ETWLib
         return m_pImp->closeSession();
     }
 
-
     void ConvertPropertiesToInfo(PEVENT_TRACE_PROPERTIES pProperties, SessionInfo& info)
     {
         assert(pProperties);
@@ -429,46 +434,146 @@ namespace ETWLib
         info.EnableKernelFlags = pProperties->EnableFlags;
         info.MaxETLFileSize = pProperties->MaximumFileSize;
 
-        info.SessionName = std::wstring((const wchar_t*)((const char*)(pProperties) + pProperties->LoggerNameOffset));
-        info.LogFileName = std::wstring((const wchar_t*)((const char*)(pProperties) + pProperties->LogFileNameOffset));
+        info.SessionName = std::wstring((const wchar_t*)((const char*)(pProperties)+pProperties->LoggerNameOffset));
+        info.LogFileName = std::wstring((const wchar_t*)((const char*)(pProperties)+pProperties->LogFileNameOffset));
     }
 
 
-#define MAX_LOG_FILE_PATH_LENGTH 1024
-#define MAX_SESSION_NAME_LENGTH 256
+
+    class ETWSessionConsumerImp
+    {
+    public:
+        ETWSessionConsumerImp(ULONG64 traceHandle, std::wstring sessionName, std::wstring etlFileName)
+            : m_sessionName(sessionName)
+            , m_etlFileName(etlFileName)
+            , m_traceHandle(traceHandle)
+            , m_handle(INVALID_PROCESSTRACE_HANDLE)
+        {
+            openSession();
+        }
+
+        ~ETWSessionConsumerImp()
+        {
+            if (m_handle)
+                closeSession();
+        }
+
+        SessionInfo& information()
+        {
+            return m_info;
+        }
+
+
+
+    protected:
+        bool openSession()
+        {
+            EVENT_TRACE_LOGFILEW logFile{};
+            logFile.LoggerName = m_sessionName.size() > 0  ? &m_sessionName[0] : nullptr;
+            logFile.LogFileName = m_etlFileName.size() > 0 ? &m_etlFileName[0] : nullptr;
+            logFile.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME;
+
+            m_handle = OpenTraceW(&logFile);
+
+            if (m_handle != INVALID_PROCESSTRACE_HANDLE)
+            {
+                queryBasicInfo();
+                queryAdvancedInfo();
+            }
+
+            return m_handle != NULL;
+        }
+
+        void queryBasicInfo()
+        {
+            if (m_handle != INVALID_PROCESSTRACE_HANDLE)
+            {
+                std::vector<unsigned char> buffer;
+                buffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME + MAX_LOG_FILE_PATH_LENGTH);
+                std::memset(buffer.data(), 0, buffer.size());
+                PEVENT_TRACE_PROPERTIES pProperties = (PEVENT_TRACE_PROPERTIES)buffer.data();
+                pProperties->Wnode.BufferSize = buffer.size();
+                pProperties->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
+                pProperties->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME;
+
+                ULONG status = ::QueryTraceW(m_traceHandle, nullptr, pProperties);
+                if (status == ERROR_SUCCESS)
+                {
+                    ConvertPropertiesToInfo(pProperties, m_info);
+                }
+                
+            }
+        }
+
+        void queryAdvancedInfo()
+        {
+            if (m_handle != INVALID_PROCESSTRACE_HANDLE)
+            {
+                GUID guids[64];
+                ULONG returnedSize = 0;
+                ULONG status = ::TraceQueryInformation(m_traceHandle, TraceGuidQueryProcess, guids, sizeof(GUID) * 64, &returnedSize);
+                status = ::TraceQueryInformation(m_traceHandle, TraceGuidQueryInfo, guids, sizeof(GUID) * 64, &returnedSize);
+            }
+        }
+
+        bool closeSession()
+        {
+            if (m_handle != INVALID_PROCESSTRACE_HANDLE)
+            {
+                ULONG status = CloseTrace(m_handle);
+                return status == ERROR_SUCCESS;
+            }
+
+            m_handle = INVALID_PROCESSTRACE_HANDLE;
+            return false;
+        }
+    protected:
+        SessionInfo m_info;
+        TRACEHANDLE m_handle;
+        TRACEHANDLE m_traceHandle;
+        std::wstring m_sessionName;
+        std::wstring m_etlFileName;
+    };
+
+    ETWSessionConsumer::ETWSessionConsumer(ULONG64 traceHandle, std::wstring sessionName, std::wstring etlFileName)
+    {
+        m_pImp = new ETWSessionConsumerImp(traceHandle, sessionName, etlFileName);
+    }
+
+    ETWSessionConsumer::~ETWSessionConsumer()
+    {
+        delete m_pImp;
+        m_pImp = nullptr;
+    }
+
+    SessionInfo& ETWSessionConsumer::SessionInfomation()
+    {
+        if (m_pImp)
+            return m_pImp->information();
+        return SessionInfo();
+    }
 
     void QueryAllSessions(std::vector<SessionInfo>& infos)
     {
-        size_t propertySize = sizeof(EVENT_TRACE_PROPERTIES) + MAX_LOG_FILE_PATH_LENGTH + MAX_SESSION_NAME_LENGTH;
-        PEVENT_TRACE_PROPERTIES sessions[MAX_SESSION_COUNT];
-
-        std::vector<unsigned char> buffer;
-        buffer.resize(propertySize * MAX_SESSION_COUNT);
-
-        unsigned char* pHeader = buffer.data();
-        for (unsigned int i = 0; i < MAX_SESSION_COUNT; i++)
+        for (TRACEHANDLE trace = 0; trace < MAX_SESSION_COUNT; trace++)
         {
-            unsigned char* pCur = pHeader + i * propertySize;
-            PEVENT_TRACE_PROPERTIES pProperty = (PEVENT_TRACE_PROPERTIES)(pCur);
-            pProperty->Wnode.BufferSize = propertySize;
-            pProperty->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
-            pProperty->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME;
-            sessions[i] = pProperty;
-        }
+            std::vector<unsigned char> buffer;
+            buffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME + MAX_LOG_FILE_PATH_LENGTH);
+            std::memset(buffer.data(), 0, buffer.size());
+            PEVENT_TRACE_PROPERTIES pProperties = (PEVENT_TRACE_PROPERTIES)buffer.data();
+            pProperties->Wnode.BufferSize = buffer.size();
+            pProperties->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
+            pProperties->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME;
 
-        ULONG sessionCount = 0;
-        ULONG status = ::QueryAllTracesW(sessions, MAX_SESSION_COUNT, &sessionCount);
-
-        if (status == ERROR_SUCCESS && sessionCount > 0)
-        {
-            for (unsigned int i = 0; i < sessionCount; i++)
+            ULONG status = ::QueryTraceW(trace, nullptr, pProperties);
+            SessionInfo info;
+            if (status == ERROR_SUCCESS)
             {
-                SessionInfo info;
-                ConvertPropertiesToInfo(sessions[i], info);
+                ConvertPropertiesToInfo(pProperties, info);
+                info.TraceHandle = trace;
                 infos.push_back(info);
             }
         }
-        else
-            infos.clear();
     }
+
 }

@@ -67,6 +67,7 @@ namespace ETWLib
     {
         std::wstring SessionName;
         std::wstring LogFileName;
+        ULONG64 TraceHandle;
     };
 
     void QueryAllSessions(std::vector<SessionInfo>&);
@@ -84,6 +85,19 @@ namespace ETWLib
         bool CloseSession();
     protected:
         ETWSessionImp* m_pImp;
+    };
+
+    class ETWSessionConsumerImp;
+
+    class ETWSessionConsumer
+    {
+    public:
+        ETWSessionConsumer(ULONG64 traceHandle, std::wstring sessionName, std::wstring etlFile);
+        ~ETWSessionConsumer();
+
+        SessionInfo& SessionInfomation();
+    protected:
+        ETWSessionConsumerImp* m_pImp;
     };
 
 }
