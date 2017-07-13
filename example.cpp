@@ -4,6 +4,8 @@ using namespace std;
 
 int main()
 {
+    std::vector<ETWLib::SessionInfo> infos;
+    ETWLib::QueryAllSessions(infos);
 	const char* privilege[1] = { SE_SYSTEM_PROFILE_NAME };
 	ETWLib::GrantPrivilegeA(privilege, 1);
 	ETWLib::SessionParameters params;
@@ -17,11 +19,11 @@ int main()
 
 	ULONG status = session.StartSession(ETWLib::LogFileMode);
 	cout << status << endl;
-	/*for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 10; i++)
 	{
 		Sleep(1 * 1000);
 		printf("%d\n", i + 1);
-	}*/
+	}
 
 	session.CloseSession();
 

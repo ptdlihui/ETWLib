@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #define EVENT_TRACE_TYPE_PERFSAMPLE 46
+#define MAX_SESSION_COUNT 64
 
 namespace ETWLib
 {
@@ -61,6 +62,14 @@ namespace ETWLib
         ULONG MinBuffers = 64;
         ULONG MaxBuffers = 128;
     };
+
+    struct SessionInfo : public SessionParameters
+    {
+        std::wstring SessionName;
+        std::wstring LogFileName;
+    };
+
+    void QueryAllSessions(std::vector<SessionInfo>&);
 
     class ETWSessionImp;
 
