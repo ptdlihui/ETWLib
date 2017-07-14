@@ -1,5 +1,6 @@
 #include "etwlib.h"
 #include <iostream>
+#include <locale>
 using namespace std;
 
 int main()
@@ -12,6 +13,7 @@ int main()
     // Example to kill the exsited session
     for (int i = 0; i < infos.size(); i++)
     {
+		//std::wcout << infos[i].SessionName << std::endl;
         if (infos[i].SessionName == std::wstring(L"TraceTest"))
         {
             ETWLib::ETWSession attachedSession(infos[i].TraceHandle);
