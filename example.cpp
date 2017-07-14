@@ -8,6 +8,18 @@ int main()
     ETWLib::QueryAllSessions(infos);
 	const char* privilege[1] = { SE_SYSTEM_PROFILE_NAME };
 	ETWLib::GrantPrivilegeA(privilege, 1);
+
+    // Example to kill the exsited session
+    for (int i = 0; i < infos.size(); i++)
+    {
+        if (infos[i].SessionName == std::wstring(L"TraceTest"))
+        {
+            ETWLib::ETWSession attachedSession(infos[i].TraceHandle);
+            attachedSession.CloseSession();
+        }
+    }
+
+    // Example to start the new session
 	ETWLib::SessionParameters params;
 
 	params.AddUserModeProvider(L"Microsoft-Windows-Runtime-Graphics", true);
@@ -26,6 +38,7 @@ int main()
 	}
 
 	session.CloseSession();
+
 
 	return 0;
 }

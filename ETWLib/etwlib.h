@@ -6,9 +6,13 @@
 
 #define EVENT_TRACE_TYPE_PERFSAMPLE 46
 #define MAX_SESSION_COUNT 64
+#define MAX_SESSION_NAME 1024
+#define MAX_LOG_FILE_PATH_LENGTH 1024
 
 namespace ETWLib
 {
+    using ETWTraceID = ULONG64;
+
     bool GrantPrivilegeA(const char** privileges, int count);
     bool GrantPrivilegeW(const wchar_t** privileges, int count);
 	std::vector<std::wstring> GetUserProvidersName();
@@ -78,6 +82,7 @@ namespace ETWLib
     {
     public:
         ETWSession(std::wstring sessionName, std::wstring etlFile);
+        ETWSession(ETWTraceID traceHandle);
         ~ETWSession();
 
         void SetParameters(SessionParameters&);

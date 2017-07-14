@@ -4,9 +4,7 @@
 #include <evntcons.h>
 #include <assert.h>
 #include <strsafe.h>
-
-#define MAX_SESSION_NAME 1024
-#define MAX_LOG_FILE_PATH_LENGTH 1024
+#include "etwutil.h"
 
 static ETWLib::ETWProviders Providers;
 
@@ -241,7 +239,9 @@ namespace ETWLib
             if (pProperties->LogFileNameOffset > 0)
                 StringCchCopyW((LPWSTR)(m_etwPropertiesBuffer.data() + pProperties->LogFileNameOffset), (etlFileName.size() + 1), etlFileName.c_str());
 
+            pProperties->Wnode.BufferSize = m_etwPropertiesBuffer.size();
             m_mode = (pProperties->LogFileNameOffset > 0) ? LogFileMode : RealTimeMode;
+            
         }
 
         PEVENT_TRACE_PROPERTIES etwProperties()
@@ -259,6 +259,13 @@ namespace ETWLib
         {
             m_context.allocETWProperties(sessionName, etlFile);
             m_context.m_traceHandle = 0;
+            m_attached = false;
+        }
+
+        ETWSessionImp(ETWTraceID id)
+        {
+            m_attached = true;
+            attachToTrace(id);
         }
 
         void setParameters(SessionParameters& params)
@@ -279,6 +286,25 @@ namespace ETWLib
         }
 
     protected:
+        ULONG attachToTrace(ULONG64 traceHandle)
+        {
+            m_context.m_traceHandle = traceHandle;
+
+            SessionInfo info;
+            if (ETWLibUtil::GetSessionInformation(traceHandle, info))
+            {
+                m_context.allocETWProperties(info.SessionName, info.LogFileName);
+                m_context.copyFromParameters(info);
+
+                ULONG status = ::QueryTraceW(traceHandle, nullptr, m_context.etwProperties());
+                return status;
+            }
+
+            return ERROR_INVALID_PARAMETER;
+            
+
+        }
+
         ULONG startSessionImp(TraceMode mode)
         {
             if (m_context.m_traceHandle != 0)
@@ -302,6 +328,9 @@ namespace ETWLib
         }
         ULONG startTrace()
         {
+            if (m_attached)
+                return ERROR_ALREADY_EXISTS;
+
             PEVENT_TRACE_PROPERTIES pTraceProperties = m_context.etwProperties();
 
             if (m_context.m_mode == RealTimeMode)
@@ -313,7 +342,6 @@ namespace ETWLib
             if (m_context.KernelModeProviders.size() > 0)
                 pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
 
-            pTraceProperties->Wnode.BufferSize = m_context.m_etwPropertiesBuffer.size();
             pTraceProperties->Wnode.ClientContext = 1;
             pTraceProperties->MaximumFileSize = m_context.MaxETLFileSize;
             pTraceProperties->BufferSize = m_context.BufferSize;
@@ -388,12 +416,18 @@ namespace ETWLib
         }
     protected:
         SessionContext m_context;
+        bool m_attached;
     };
 
 
     ETWSession::ETWSession(std::wstring sessionName, std::wstring etlFile)
     {
         m_pImp = new ETWSessionImp(sessionName, etlFile);
+    }
+
+    ETWSession::ETWSession(ETWTraceID id)
+    {
+        m_pImp = new ETWSessionImp(id);
     }
 
     ETWSession::~ETWSession()
@@ -422,20 +456,6 @@ namespace ETWLib
     {
         assert(m_pImp);
         return m_pImp->closeSession();
-    }
-
-    void ConvertPropertiesToInfo(PEVENT_TRACE_PROPERTIES pProperties, SessionInfo& info)
-    {
-        assert(pProperties);
-
-        info.BufferSize = pProperties->BufferSize;
-        info.MaxBuffers = pProperties->MaximumBuffers;
-        info.MinBuffers = pProperties->MinimumBuffers;
-        info.EnableKernelFlags = pProperties->EnableFlags;
-        info.MaxETLFileSize = pProperties->MaximumFileSize;
-
-        info.SessionName = std::wstring((const wchar_t*)((const char*)(pProperties)+pProperties->LoggerNameOffset));
-        info.LogFileName = std::wstring((const wchar_t*)((const char*)(pProperties)+pProperties->LogFileNameOffset));
     }
 
 
@@ -487,22 +507,7 @@ namespace ETWLib
         void queryBasicInfo()
         {
             if (m_handle != INVALID_PROCESSTRACE_HANDLE)
-            {
-                std::vector<unsigned char> buffer;
-                buffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME + MAX_LOG_FILE_PATH_LENGTH);
-                std::memset(buffer.data(), 0, buffer.size());
-                PEVENT_TRACE_PROPERTIES pProperties = (PEVENT_TRACE_PROPERTIES)buffer.data();
-                pProperties->Wnode.BufferSize = buffer.size();
-                pProperties->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
-                pProperties->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME;
-
-                ULONG status = ::QueryTraceW(m_traceHandle, nullptr, pProperties);
-                if (status == ERROR_SUCCESS)
-                {
-                    ConvertPropertiesToInfo(pProperties, m_info);
-                }
-                
-            }
+                ETWLibUtil::GetSessionInformation(m_traceHandle, m_info);
         }
 
         void queryAdvancedInfo()
@@ -512,7 +517,6 @@ namespace ETWLib
                 GUID guids[64];
                 ULONG returnedSize = 0;
                 ULONG status = ::TraceQueryInformation(m_traceHandle, TraceGuidQueryProcess, guids, sizeof(GUID) * 64, &returnedSize);
-                status = ::TraceQueryInformation(m_traceHandle, TraceGuidQueryInfo, guids, sizeof(GUID) * 64, &returnedSize);
             }
         }
 
@@ -557,22 +561,9 @@ namespace ETWLib
     {
         for (TRACEHANDLE trace = 0; trace < MAX_SESSION_COUNT; trace++)
         {
-            std::vector<unsigned char> buffer;
-            buffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME + MAX_LOG_FILE_PATH_LENGTH);
-            std::memset(buffer.data(), 0, buffer.size());
-            PEVENT_TRACE_PROPERTIES pProperties = (PEVENT_TRACE_PROPERTIES)buffer.data();
-            pProperties->Wnode.BufferSize = buffer.size();
-            pProperties->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
-            pProperties->LogFileNameOffset = sizeof(EVENT_TRACE_PROPERTIES) + MAX_SESSION_NAME;
-
-            ULONG status = ::QueryTraceW(trace, nullptr, pProperties);
             SessionInfo info;
-            if (status == ERROR_SUCCESS)
-            {
-                ConvertPropertiesToInfo(pProperties, info);
-                info.TraceHandle = trace;
+            if (ETWLibUtil::GetSessionInformation(trace, info))
                 infos.push_back(info);
-            }
         }
     }
 
