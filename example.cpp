@@ -26,19 +26,15 @@ int main()
 
 	params.AddUserModeProvider(L"Microsoft-Windows-Runtime-Graphics", true);
 	params.AddUserModeProvider(L"Microsoft-Windows-DXGI", true);
+	//params.AddUserModeProvider(L"Microsoft-Windows-WebdavClient-LookupServiceTrigger", true);
+	params.AddUserModeProvider(L"Microsoft-Windows-ApplicationExperience-LookupServiceTrigger", true);
 	params.EnableProfilling(true);
 
 	ETWLib::ETWSession session(L"TraceTest", L"d:\\Test.etl");
 	session.SetParameters(params);
 
-	ULONG status = session.StartSession(ETWLib::LogFileMode);
-	cout << status << endl;
-	for (int i = 0; i < 10; i++)
-	{
-		Sleep(1 * 1000);
-		printf("%d\n", i + 1);
-	}
-
+	bool status = session.StartSession(ETWLib::LogFileMode);//1 stand for success
+	//cout << status << endl;
 	session.CloseSession();
 
 

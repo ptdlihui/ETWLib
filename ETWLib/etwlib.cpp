@@ -308,23 +308,23 @@ namespace ETWLib
         ULONG startSessionImp(TraceMode mode)
         {
             if (m_context.m_traceHandle != 0)
-                return false;
+                return ERROR_INVALID_HANDLE;
 
             m_context.m_mode = mode;
 
             ULONG status = startTrace();
             if (status != ERROR_SUCCESS)
-                return false;
+                return status;
 
             status = enableUserModeProviders();
             if (status != ERROR_SUCCESS)
-                return false;
+                return status;
 
             status = enableKerneProviders();
             if (status != ERROR_SUCCESS)
-                return false;
+                return status;
 
-            return true;
+            return ERROR_SUCCESS;
         }
         ULONG startTrace()
         {
@@ -398,10 +398,11 @@ namespace ETWLib
                 return ERROR_INVALID_HANDLE;
 
             ULONG status = ERROR_SUCCESS;
-
+			int i = 0;
             for (auto& instance : m_context.UserModeProviders)
             {
-                ENABLE_TRACE_PARAMETERS params{};
+				i++;
+				ENABLE_TRACE_PARAMETERS params{};
                 if (instance.stackwalk)
                     params.EnableProperty = EVENT_ENABLE_PROPERTY_STACK_TRACE;
                 params.Version = ENABLE_TRACE_PARAMETERS_VERSION_2;
@@ -411,7 +412,7 @@ namespace ETWLib
                 if (status != ERROR_SUCCESS)
                     return status;
             }
-
+			i;
             return status;
         }
     protected:
