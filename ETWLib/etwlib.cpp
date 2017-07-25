@@ -6,6 +6,7 @@
 #include <strsafe.h>
 #include "etwutil.h"
 
+#define MAX_FILTER_NUMBER 8
 static ETWLib::ETWProviders Providers;
 
 template <typename char_type>
@@ -119,13 +120,19 @@ namespace ETWLib
 
     SessionParameters::SessionParameters()
     {
-        EnableKernelFlags = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD;
+        EnableKernelFlags = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC | EVENT_TRACE_FLAG_VAMAP;
     }
 
     void
     SessionParameters::AddKernelModeProvider(KernelModeProviderFlag provider, unsigned char eventid, bool stack)
     {
-        KernelModeProviders.push_back({ Providers.KernelModeProvider(provider), eventid, stack});
+        ProviderEnableParameters params;
+        params.guid = Providers.KernelModeProvider(provider);
+        params.eventId = eventid;
+        params.stackwalk = stack;
+        std::memset(params.processID, 0, sizeof(params.processID));
+
+        KernelModeProviders.push_back(params);
     }
 
 	void 
@@ -141,9 +148,20 @@ namespace ETWLib
 	}
 
     void
-    SessionParameters::AddUserModeProvider(std::wstring name, bool stack)
+    SessionParameters::AddUserModeProvider(std::wstring name, bool stack, TraceLevel level, DWORD* pProcessIDs, unsigned int count)
     {
-        UserModeProviders.push_back({ Providers.UserModeProvider(name), 0, stack });
+        ProviderEnableParameters params;
+        params.guid = Providers.UserModeProvider(name);
+        params.eventId = level;
+        params.stackwalk = stack;
+        std::memset(params.processID, 0, sizeof(DWORD) * MAX_PROCESS_NUMBER);
+
+        if (count > 0 && count <= MAX_PROCESS_NUMBER)
+        {
+            std::memcpy(params.processID, pProcessIDs, count * sizeof(DWORD));
+        }
+
+        UserModeProviders.push_back(params);
     }
 
 	void 
@@ -343,6 +361,9 @@ namespace ETWLib
                 pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
 
             pTraceProperties->Wnode.ClientContext = 1;
+            //pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
+            //pTraceProperties->Wnode.Guid = SystemTraceControlGuid;
+
             pTraceProperties->MaximumFileSize = m_context.MaxETLFileSize;
             pTraceProperties->BufferSize = m_context.BufferSize;
             pTraceProperties->MinimumBuffers = m_context.MinBuffers;
@@ -398,26 +419,51 @@ namespace ETWLib
                 return ERROR_INVALID_HANDLE;
 
             ULONG status = ERROR_SUCCESS;
-			int i = 0;
             for (auto& instance : m_context.UserModeProviders)
             {
-				i++;
 				ENABLE_TRACE_PARAMETERS params{};
                 if (instance.stackwalk)
                     params.EnableProperty = EVENT_ENABLE_PROPERTY_STACK_TRACE;
                 params.Version = ENABLE_TRACE_PARAMETERS_VERSION_2;
+                if (addProcessIDConfig(instance))
+                {
+                    params.FilterDescCount = 1;
+                    params.EnableFilterDesc = m_userModeProviderFilter;
+                }
 
-                status = EnableTraceEx2(m_context.m_traceHandle, &(instance.guid), EVENT_CONTROL_CODE_ENABLE_PROVIDER, TRACE_LEVEL_VERBOSE, 0, 0, 0, &params);
+                status = EnableTraceEx2(m_context.m_traceHandle, &(instance.guid), EVENT_CONTROL_CODE_ENABLE_PROVIDER, instance.eventId , 0, 0, 0, &params);
 
                 if (status != ERROR_SUCCESS)
                     return status;
             }
-			i;
             return status;
+        }
+
+        bool addProcessIDConfig(ProviderEnableParameters& params)
+        {
+            if (params.processID[0] > 0)
+            {
+                std::memset(m_userModeProviderFilter, 0, sizeof(EVENT_FILTER_DESCRIPTOR) * MAX_FILTER_NUMBER);
+                ULONG processIDCount = 0;
+                for (int i = 0; i < MAX_FILTER_NUMBER; i++)
+                {
+                    if (params.processID[i] == 0)
+                        break;
+                    processIDCount++;
+                };
+
+                m_userModeProviderFilter[0].Ptr = reinterpret_cast<ULONGLONG>(params.processID);
+                m_userModeProviderFilter[0].Size = processIDCount * sizeof(DWORD);
+                m_userModeProviderFilter[0].Type = EVENT_FILTER_TYPE_PID;
+                return true;
+            }
+
+            return false;
         }
     protected:
         SessionContext m_context;
         bool m_attached;
+        EVENT_FILTER_DESCRIPTOR m_userModeProviderFilter[MAX_FILTER_NUMBER];
     };
 
 

@@ -8,6 +8,7 @@
 #define MAX_SESSION_COUNT 64
 #define MAX_SESSION_NAME 1024
 #define MAX_LOG_FILE_PATH_LENGTH 1024
+#define MAX_PROCESS_NUMBER 8
 
 namespace ETWLib
 {
@@ -20,6 +21,18 @@ namespace ETWLib
     {
         LogFileMode = 0x1,
         RealTimeMode = 0x2
+    };
+
+    enum TraceLevel
+    {
+        LevelNone = 0,
+        LevelCritical,
+        LevleFatal,
+        LevelError,
+        LevelWarning,
+        LevelInformation,
+        LevelVerbose,
+        LevelCount
     };
 
     enum KernelModeProviderFlag
@@ -45,6 +58,7 @@ namespace ETWLib
         GUID guid;
         unsigned char eventId;
         bool stackwalk;
+        DWORD processID[MAX_PROCESS_NUMBER];
     };
 
 
@@ -55,7 +69,7 @@ namespace ETWLib
 		void AddKernelModeProvider(KernelModeProviderFlag, unsigned char eventid, bool stack);
 		void EraseKernelModeProvider(KernelModeProviderFlag);
 
-        void AddUserModeProvider(std::wstring, bool stack);
+        void AddUserModeProvider(std::wstring, bool stack, TraceLevel level = LevelVerbose, DWORD* pProcessIDs = nullptr, unsigned int count = 0);
 		void EraseUserModeProvider(std::wstring);
 		
         std::vector<ProviderEnableParameters> UserModeProviders;
@@ -64,7 +78,7 @@ namespace ETWLib
         ULONG MaxETLFileSize = 128;
         ULONG BufferSize = 1024;
         ULONG MinBuffers = 64;
-        ULONG MaxBuffers = 128;
+        ULONG MaxBuffers = 1024;
     };
 
     struct SessionInfo : public SessionParameters
