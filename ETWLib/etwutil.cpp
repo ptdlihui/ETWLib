@@ -13,7 +13,7 @@ namespace ETWLibUtil
         info.BufferSize = pProperties->BufferSize;
         info.MaxBuffers = pProperties->MaximumBuffers;
         info.MinBuffers = pProperties->MinimumBuffers;
-        info.EnableKernelFlags = pProperties->EnableFlags;
+        info.EnableKernelFlags[0] = pProperties->EnableFlags;
         info.MaxETLFileSize = pProperties->MaximumFileSize;
 
         info.SessionName = std::wstring((const wchar_t*)((const char*)(pProperties)+pProperties->LoggerNameOffset));
@@ -36,6 +36,9 @@ namespace ETWLibUtil
         {
             ConvertPropertiesToInfo(pProperties, info);
             info.TraceHandle = handle;
+
+            ULONG returnedSize;
+            ULONG ret = TraceQueryInformation(handle, TraceSystemTraceEnableFlagsInfo, info.EnableKernelFlags, sizeof(info.EnableKernelFlags), &returnedSize);
             return true;
         }
 

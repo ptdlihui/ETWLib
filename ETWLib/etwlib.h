@@ -50,6 +50,7 @@ namespace ETWLib
         TCPIP = 10,
         Thread = 11,
         Udplp = 12,
+        Heap = 13,
         KMPCount
     };
 
@@ -74,7 +75,7 @@ namespace ETWLib
 		
         std::vector<ProviderEnableParameters> UserModeProviders;
         std::vector<ProviderEnableParameters> KernelModeProviders;
-        ULONG EnableKernelFlags;
+        ULONG EnableKernelFlags[8];
         ULONG MaxETLFileSize = 128;
         ULONG BufferSize = 1024;
         ULONG MinBuffers = 64;
@@ -98,6 +99,8 @@ namespace ETWLib
         ETWSession(std::wstring sessionName, std::wstring etlFile);
         ETWSession(ETWTraceID traceHandle);
         ~ETWSession();
+
+        ETWTraceID TraceID() const;
 
         void SetParameters(SessionParameters&);
         bool StartSession(TraceMode mode);

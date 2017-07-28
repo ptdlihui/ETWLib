@@ -120,7 +120,8 @@ namespace ETWLib
 
     SessionParameters::SessionParameters()
     {
-        EnableKernelFlags = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC | EVENT_TRACE_FLAG_VAMAP;
+        std::memset(EnableKernelFlags, 0, sizeof(EnableKernelFlags));
+        EnableKernelFlags[0] = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC;
     }
 
     void
@@ -187,7 +188,7 @@ namespace ETWLib
         if (enabled == false)
             return;
 
-        EnableKernelFlags |= EVENT_TRACE_FLAG_PROFILE;
+        EnableKernelFlags[0] |= EVENT_TRACE_FLAG_PROFILE;
 
         for (auto& instance : UserModeProviders)
             instance.stackwalk = true;
@@ -224,7 +225,7 @@ namespace ETWLib
             UserModeProviders.resize(params.UserModeProviders.size());
             std::copy(params.UserModeProviders.begin(), params.UserModeProviders.end(), UserModeProviders.begin());
 
-            EnableKernelFlags = params.EnableKernelFlags;
+            std::memcpy(EnableKernelFlags, params.EnableKernelFlags, sizeof(EnableKernelFlags));
             MaxETLFileSize = params.MaxETLFileSize;
             BufferSize = params.BufferSize;
             MinBuffers = params.MinBuffers;
@@ -303,6 +304,11 @@ namespace ETWLib
             return status == ERROR_SUCCESS;
         }
 
+        ETWTraceID traceID()
+        {
+            return m_context.m_traceHandle;
+        }
+
     protected:
         ULONG attachToTrace(ULONG64 traceHandle)
         {
@@ -355,14 +361,14 @@ namespace ETWLib
                 pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
 
             if (m_context.m_mode == LogFileMode)
-                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_CIRCULAR;
+                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL;
 
             if (m_context.KernelModeProviders.size() > 0)
                 pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
 
             pTraceProperties->Wnode.ClientContext = 1;
-            //pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
-            //pTraceProperties->Wnode.Guid = SystemTraceControlGuid;
+            pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
+            pTraceProperties->Wnode.Guid = HeapGuid;
 
             pTraceProperties->MaximumFileSize = m_context.MaxETLFileSize;
             pTraceProperties->BufferSize = m_context.BufferSize;
@@ -406,8 +412,9 @@ namespace ETWLib
 
             if (status == ERROR_SUCCESS)
             {
-                ULONG kernelFlags = m_context.EnableKernelFlags;
-                status = TraceSetInformation(m_context.m_traceHandle, TraceSystemTraceEnableFlagsInfo, &kernelFlags, sizeof(kernelFlags));
+                m_context.EnableKernelFlags[0] |= EVENT_TRACE_FLAG_VIRTUAL_ALLOC;
+                m_context.EnableKernelFlags[2] = 0x40000020;
+                status = TraceSetInformation(m_context.m_traceHandle, TraceSystemTraceEnableFlagsInfo, m_context.EnableKernelFlags, sizeof(m_context.EnableKernelFlags));
             }
 
             return status;
@@ -505,7 +512,12 @@ namespace ETWLib
         return m_pImp->closeSession();
     }
 
-
+    ETWTraceID
+    ETWSession::TraceID() const
+    {
+        assert(m_pImp);
+        return m_pImp->traceID();
+    }
 
     class ETWSessionConsumerImp
     {
@@ -530,7 +542,10 @@ namespace ETWLib
             return m_info;
         }
 
-
+        ETWTraceID traceID()
+        {
+            return m_info.TraceHandle;
+        }
 
     protected:
         bool openSession()
