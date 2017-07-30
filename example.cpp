@@ -24,14 +24,11 @@ int main()
     // Example to start the new session
 	ETWLib::SessionParameters params;
 
-	//params.AddUserModeProvider(L"Microsoft-Windows-Runtime-Graphics", true);
-	//params.AddUserModeProvider(L"Microsoft-Windows-DXGI", true);
+	params.AddUserModeProvider(L"Microsoft-Windows-Runtime-Graphics", true);
+	params.AddUserModeProvider(L"Microsoft-Windows-DXGI", true);
 	//params.AddUserModeProvider(L"Microsoft-Windows-WebdavClient-LookupServiceTrigger", true);
     //params.AddUserModeProvider(L"Windows Kernel Trace", true);
-    DWORD pid = 13660;
-    params.AddUserModeProvider(L"Heap Trace Provider", false, ETWLib::LevelVerbose, &pid, 1);
-    params.EnableKernelFlags[0] = 0;
-    //params.EnableProfilling(true);
+    params.EnableProfilling(true);
 
 	ETWLib::ETWSession session(L"TraceTest", L"d:\\Test.etl");
 	session.SetParameters(params);

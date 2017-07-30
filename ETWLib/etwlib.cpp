@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <strsafe.h>
 #include "etwutil.h"
+#include "etwcons.h"
 
 #define MAX_FILTER_NUMBER 8
 static ETWLib::ETWProviders Providers;
@@ -239,13 +240,14 @@ namespace ETWLib
 
         TraceMode m_mode;
         TRACEHANDLE m_traceHandle;
+        unsigned int m_extensionOffset = 0;
 
         void allocETWProperties(std::wstring sessionName, std::wstring etlFileName)
         {
             m_sessionName = sessionName;
             m_etlFileName = etlFileName;
 
-            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type));
+            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type) + EXTENSION_SIZE);
             std::memset(m_etwPropertiesBuffer.data(), 0, m_etwPropertiesBuffer.size());
 
             PEVENT_TRACE_PROPERTIES pProperties = etwProperties();
@@ -260,6 +262,8 @@ namespace ETWLib
 
             pProperties->Wnode.BufferSize = m_etwPropertiesBuffer.size();
             m_mode = (pProperties->LogFileNameOffset > 0) ? LogFileMode : RealTimeMode;
+
+            m_extensionOffset = pProperties->LogFileNameOffset + (etlFileName.size() + 1) * sizeof(std::wstring::value_type);
             
         }
 
@@ -368,7 +372,6 @@ namespace ETWLib
 
             pTraceProperties->Wnode.ClientContext = 1;
             pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
-            pTraceProperties->Wnode.Guid = HeapGuid;
 
             pTraceProperties->MaximumFileSize = m_context.MaxETLFileSize;
             pTraceProperties->BufferSize = m_context.BufferSize;
@@ -384,7 +387,13 @@ namespace ETWLib
         {
             if (m_context.m_traceHandle == 0)
                 return ERROR_INVALID_HANDLE;
-            ULONG status = ControlTraceW(m_context.m_traceHandle, NULL, m_context.etwProperties(), EVENT_TRACE_CONTROL_STOP);
+
+            ULONG status = 0;
+            if (m_context.m_traceHandle <= MAX_SESSION_COUNT)
+                ControlTraceW(m_context.m_traceHandle, nullptr, m_context.etwProperties(), EVENT_TRACE_CONTROL_STOP);
+            else
+                ControlTraceW(NULL, m_context.m_sessionName.c_str(), m_context.etwProperties(), EVENT_TRACE_CONTROL_STOP);
+
             return status;
         }
 
