@@ -8,6 +8,25 @@
 
 #define MAX_FILTER_NUMBER 8
 static ETWLib::ETWProviders Providers;
+#define EXTENSION_SIZE 256
+
+//#define HEAP_TEST
+#define HEAP_PROPERTY_SIZE 2048
+#define HEAP_PID_OFFSET 0x488
+
+struct PIDAttach
+{
+    ULONG reserved0 = 0x00010003;
+    ULONG reserved1 = 0x00020002;
+    ULONG pid;
+};
+
+struct FlagExtension
+{
+    unsigned short offset;
+    unsigned char length;
+    unsigned char flag;
+};
 
 template <typename char_type>
 BOOL __LookupPrivilegeValue__(const char_type* , const char_type* , LUID* )
@@ -234,6 +253,7 @@ namespace ETWLib
 
         std::wstring m_sessionName;
         std::wstring m_etlFileName;
+        unsigned int m_extensionOffset = 0;
 
         std::vector<unsigned char> m_etwPropertiesBuffer;
 
@@ -245,14 +265,21 @@ namespace ETWLib
             m_sessionName = sessionName;
             m_etlFileName = etlFileName;
 
-            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type));
+#ifndef HEAP_TEST
+            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type) + EXTENSION_SIZE);
+#else
+            m_etwPropertiesBuffer.resize(HEAP_PROPERTY_SIZE);
+#endif
             std::memset(m_etwPropertiesBuffer.data(), 0, m_etwPropertiesBuffer.size());
 
             PEVENT_TRACE_PROPERTIES pProperties = etwProperties();
 
             pProperties->LoggerNameOffset = sizeof(EVENT_TRACE_PROPERTIES);
+#ifndef HEAP_TEST
             pProperties->LogFileNameOffset = (etlFileName.size() > 0 ? (sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + 1) * sizeof(std::wstring::value_type)) : 0);
-
+#else
+            pProperties->LogFileNameOffset = 640;
+#endif
             StringCchCopyW((LPWSTR)(m_etwPropertiesBuffer.data() + pProperties->LoggerNameOffset), (sessionName.size() + 1), sessionName.c_str());
 
             if (pProperties->LogFileNameOffset > 0)
@@ -260,6 +287,8 @@ namespace ETWLib
 
             pProperties->Wnode.BufferSize = m_etwPropertiesBuffer.size();
             m_mode = (pProperties->LogFileNameOffset > 0) ? LogFileMode : RealTimeMode;
+
+            m_extensionOffset = pProperties->LogFileNameOffset + (etlFileName.size() + 1) * sizeof(std::wstring::value_type);
             
         }
 
@@ -361,7 +390,7 @@ namespace ETWLib
                 pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
 
             if (m_context.m_mode == LogFileMode)
-                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL;
+                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL | EVENT_TRACE_INDEPENDENT_SESSION_MODE ;
 
             if (m_context.KernelModeProviders.size() > 0)
                 pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
@@ -369,12 +398,35 @@ namespace ETWLib
             pTraceProperties->Wnode.ClientContext = 1;
             pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
             pTraceProperties->Wnode.Guid = HeapGuid;
+            pTraceProperties->Wnode.HistoricalContext = 0x0000000001000001;
+            //pTraceProperties->EnableFlags = EVENT_TRACE_FLAG_ALPC | EVENT_TRACE_FLAG_DBGPRINT | EVENT_TRACE_FLAG_DISK_IO_INIT | EVENT_TRACE_FLAG_DRIVER | EVENT_TRACE_FLAG_EXTENSION | EVENT_TRACE_FLAG_NETWORK_TCPIP | EVENT_TRACE_FLAG_PROCESS_COUNTERS | EVENT_TRACE_FLAG_REGISTRY | EVENT_TRACE_FLAG_SPLIT_IO;
+            FlagExtension fgExt;
+            fgExt.offset = m_context.m_extensionOffset;
+            fgExt.length = 0xff;
+            fgExt.flag = 0x80;
+
+            std::memcpy(&(pTraceProperties->EnableFlags), &fgExt, sizeof(pTraceProperties->EnableFlags));
+#ifdef HEAP_TEST
+            pTraceProperties->EnableFlags = 0x80ff0488;
+#endif
 
             pTraceProperties->MaximumFileSize = m_context.MaxETLFileSize;
             pTraceProperties->BufferSize = m_context.BufferSize;
             pTraceProperties->MinimumBuffers = m_context.MinBuffers;
             pTraceProperties->MaximumBuffers = m_context.MaxBuffers;
+            pTraceProperties->AgeLimit = 15;
 
+            PIDAttach pid;
+            pid.pid = 11768;
+            //pid.reserved0 = 0;
+            //pid.reserved1 = 0;
+#ifdef HEAP_TEST
+            std::memcpy(m_context.m_etwPropertiesBuffer.data() + HEAP_PID_OFFSET, &pid, sizeof(PIDAttach));
+#else
+            std::memcpy(m_context.m_etwPropertiesBuffer.data() + m_context.m_extensionOffset, &pid, sizeof(PIDAttach));
+#endif
+
+            m_context.m_traceHandle = 0xffffffffffffffff;
 
             ULONG status = StartTraceW(&(m_context.m_traceHandle), m_context.m_sessionName.c_str(), pTraceProperties);
             return status;
@@ -384,7 +436,12 @@ namespace ETWLib
         {
             if (m_context.m_traceHandle == 0)
                 return ERROR_INVALID_HANDLE;
-            ULONG status = ControlTraceW(m_context.m_traceHandle, NULL, m_context.etwProperties(), EVENT_TRACE_CONTROL_STOP);
+            
+            ULONG status = 0;
+            if (m_context.m_traceHandle <= MAX_SESSION_COUNT)
+                ControlTraceW(m_context.m_traceHandle, nullptr, m_context.etwProperties(), EVENT_TRACE_CONTROL_STOP);
+            else
+                ControlTraceW(NULL, m_context.m_sessionName.c_str(), m_context.etwProperties(), EVENT_TRACE_CONTROL_STOP);
             return status;
         }
 

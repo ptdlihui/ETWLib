@@ -36,9 +36,6 @@ namespace ETWLibUtil
         {
             ConvertPropertiesToInfo(pProperties, info);
             info.TraceHandle = handle;
-
-            ULONG returnedSize;
-            ULONG ret = TraceQueryInformation(handle, TraceSystemTraceEnableFlagsInfo, info.EnableKernelFlags, sizeof(info.EnableKernelFlags), &returnedSize);
             return true;
         }
 
