@@ -119,14 +119,17 @@ namespace ETWLib
 		}
     }
 
-    SessionParameters::SessionParameters()
+    SessionParameters::SessionParameters(SessionType type)
     {
         std::memset(EnableKernelFlags, 0, sizeof(EnableKernelFlags));
         EnableKernelFlags[0] = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC;
+        
+        std::memset(ProcessIDs, 0, sizeof(ProcessIDs));
+        Type = type;
     }
 
     void
-    SessionParameters::AddKernelModeProvider(KernelModeProviderFlag provider, unsigned char eventid, bool stack)
+    SessionParameters::AddKernelModeProvider(KernelModeProviderFlag provider, unsigned short eventid, bool stack)
     {
         ProviderEnableParameters params;
         params.guid = Providers.KernelModeProvider(provider);
@@ -231,6 +234,9 @@ namespace ETWLib
             BufferSize = params.BufferSize;
             MinBuffers = params.MinBuffers;
             MaxBuffers = params.MaxBuffers;
+
+            Type = params.Type;
+            std::memcpy(ProcessIDs, params.ProcessIDs, sizeof(ProcessIDs));
         }
 
         std::wstring m_sessionName;
@@ -247,7 +253,7 @@ namespace ETWLib
             m_sessionName = sessionName;
             m_etlFileName = etlFileName;
 
-            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type) + EXTENSION_SIZE);
+            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type) + EXTENSION_SIZE * sizeof(ULONG));
             std::memset(m_etwPropertiesBuffer.data(), 0, m_etwPropertiesBuffer.size());
 
             PEVENT_TRACE_PROPERTIES pProperties = etwProperties();
@@ -271,6 +277,56 @@ namespace ETWLib
         {
             assert(m_etwPropertiesBuffer.size() > sizeof(EVENT_TRACE_PROPERTIES));
             return reinterpret_cast<PEVENT_TRACE_PROPERTIES>(m_etwPropertiesBuffer.data());
+        }
+
+        void ConfigPropertyBufferSize()
+        {
+            etwProperties()->MaximumFileSize = MaxETLFileSize;
+            etwProperties()->BufferSize = BufferSize;
+            etwProperties()->MinimumBuffers = MinBuffers;
+            etwProperties()->MaximumBuffers = MaxBuffers;
+        }
+
+        void ConifgNormalSession()
+        {
+            assert(Type == NormalSession);
+            PEVENT_TRACE_PROPERTIES pTraceProperties = etwProperties();
+
+            if (m_mode == RealTimeMode)
+                pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+
+            if (m_mode == LogFileMode)
+                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL;
+
+            if (KernelModeProviders.size() > 0)
+                pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
+
+            pTraceProperties->Wnode.ClientContext = 1;
+            pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
+
+            ConfigPropertyBufferSize();
+        }
+
+
+        void ConfigHeapSession()
+        {
+            PEVENT_TRACE_PROPERTIES pTraceProperties = etwProperties();
+
+            if (m_mode == RealTimeMode)
+                pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+
+            if (m_mode == LogFileMode)
+                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL | EVENT_TRACE_INDEPENDENT_SESSION_MODE;
+
+            if (KernelModeProviders.size() > 0)
+                pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
+
+            pTraceProperties->Wnode.ClientContext = 1;
+            pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
+            pTraceProperties->Wnode.Guid = HeapGuid;
+
+
+
         }
     };
 
