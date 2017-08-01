@@ -10,6 +10,9 @@
 #define MAX_FILTER_NUMBER 8
 static ETWLib::ETWProviders Providers;
 
+const ULONG KernelEnableFlag = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD 
+                                | EVENT_TRACE_FLAG_MEMORY_HARD_FAULTS | EVENT_TRACE_FLAG_DISK_IO | EVENT_TRACE_FLAG_DISK_FILE_IO | EVENT_TRACE_FLAG_PROFILE;
+
 template <typename char_type>
 BOOL __LookupPrivilegeValue__(const char_type* , const char_type* , LUID* )
 {
@@ -122,7 +125,8 @@ namespace ETWLib
     SessionParameters::SessionParameters(SessionType type)
     {
         std::memset(EnableKernelFlags, 0, sizeof(EnableKernelFlags));
-        EnableKernelFlags[0] = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC;
+        if (type == NormalSession)
+            EnableKernelFlags[0] = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC;
         
         std::memset(ProcessIDs, 0, sizeof(ProcessIDs));
         Type = type;
@@ -237,6 +241,11 @@ namespace ETWLib
 
             Type = params.Type;
             std::memcpy(ProcessIDs, params.ProcessIDs, sizeof(ProcessIDs));
+            if (Type == BaseSession)
+            {
+                m_sessionName = KERNEL_LOGGER_NAMEW;
+                allocETWProperties(m_sessionName, m_etlFileName);
+            }
         }
 
         std::wstring m_sessionName;
@@ -250,10 +259,13 @@ namespace ETWLib
 
         void allocETWProperties(std::wstring sessionName, std::wstring etlFileName)
         {
+            if (Type == BaseSession)
+                sessionName = KERNEL_LOGGER_NAMEW;
+
             m_sessionName = sessionName;
             m_etlFileName = etlFileName;
 
-            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type) + EXTENSION_SIZE * sizeof(ULONG));
+            m_etwPropertiesBuffer.resize(sizeof(EVENT_TRACE_PROPERTIES) + (sessionName.size() + etlFileName.size() + 2) * sizeof(std::wstring::value_type) + (EXTENSION_SIZE + 1) * sizeof(ULONG));
             std::memset(m_etwPropertiesBuffer.data(), 0, m_etwPropertiesBuffer.size());
 
             PEVENT_TRACE_PROPERTIES pProperties = etwProperties();
@@ -269,7 +281,12 @@ namespace ETWLib
             pProperties->Wnode.BufferSize = m_etwPropertiesBuffer.size();
             m_mode = (pProperties->LogFileNameOffset > 0) ? LogFileMode : RealTimeMode;
 
-            m_extensionOffset = pProperties->LogFileNameOffset + (etlFileName.size() + 1) * sizeof(std::wstring::value_type);
+            if (pProperties->LogFileNameOffset > 0)
+                m_extensionOffset = pProperties->LogFileNameOffset + (etlFileName.size() + 1) * sizeof(std::wstring::value_type);
+            else
+                m_extensionOffset = pProperties->LoggerNameOffset + (sessionName.size() + 1) * sizeof(std::wstring::value_type);
+
+            m_extensionOffset = ((m_extensionOffset + 4) / 4) * 4;
             
         }
 
@@ -287,7 +304,19 @@ namespace ETWLib
             etwProperties()->MaximumBuffers = MaxBuffers;
         }
 
-        void ConifgNormalSession()
+        ULONG ConfigSession()
+        {
+            if (Type == NormalSession)
+                return ConifgNormalSession();
+            else if (Type == HeapSession)
+                return ConfigHeapSession();
+            else if (Type == BaseSession)
+                return ConfigKernelSession();
+
+            return ERROR_INVALID_PARAMETER;
+        }
+
+        ULONG ConifgNormalSession()
         {
             assert(Type == NormalSession);
             PEVENT_TRACE_PROPERTIES pTraceProperties = etwProperties();
@@ -305,10 +334,82 @@ namespace ETWLib
             pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
 
             ConfigPropertyBufferSize();
+
+            return ERROR_SUCCESS;
+        }
+
+        ULONG ConfigKernelSession()
+        {
+            assert(Type == BaseSession);
+            PEVENT_TRACE_PROPERTIES pTraceProperties = etwProperties();
+
+            if (m_mode == RealTimeMode)
+                pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+
+            if (m_mode == LogFileMode)
+                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL;
+
+            //if (KernelModeProviders.size() > 0)
+            //    pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
+
+            pTraceProperties->Wnode.ClientContext = 1;
+            pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
+            pTraceProperties->Wnode.Guid = KernelGuid;
+
+            ConfigPropertyBufferSize();
+            pTraceProperties->AgeLimit = 15;
+
+            EnableKernelFlags[0] |= KernelEnableFlag;
+            EnableKernelFlags[2] |= PERF_CPU_CONFIG;
+
+            ExtHeader enableFlagHeader;
+            enableFlagHeader.number = 9;
+            enableFlagHeader.flag = EXT_BUFFER_GROUPMASK;
+
+            std::vector<ULONG> stackedEvents;
+
+            for (unsigned int i = 0; i < KernelModeProviders.size(); i++)
+            {
+                if (KernelModeProviders[i].guid == KernelGuid
+                    && KernelModeProviders[i].stackwalk == true)
+                    stackedEvents.push_back(KernelModeProviders[i].eventId);
+            }
+
+            ExtHeader stackHeader;
+            stackHeader.number = 1 + stackedEvents.size();
+            stackHeader.flag = EXT_BUFFER_STACKWALK;
+
+            ExtHeader header;
+            header.number = 10;
+            header.flag = 1;
+
+            if (stackHeader.number > 1)
+            {
+                header.number += stackHeader.number;
+                header.flag += 1;
+            }
+
+            TraceExtension extBuffer;
+            extBuffer.AppendItem(0, header, nullptr);
+            extBuffer.AppendItem(1, enableFlagHeader, EnableKernelFlags);
+
+            if (stackHeader.number > 1)
+                extBuffer.AppendItem(10, stackHeader, stackedEvents.data());
+
+
+            FlagExtension fgExt;
+            fgExt.offset = m_extensionOffset;
+            fgExt.length = 0xff;
+            fgExt.flag = 0x80;
+
+            std::memcpy(&(pTraceProperties->EnableFlags), &fgExt, sizeof(pTraceProperties->EnableFlags));
+            std::memcpy(m_etwPropertiesBuffer.data() + m_extensionOffset, extBuffer.data, sizeof(ULONG) * EXTENSION_SIZE);
+
+            return ERROR_SUCCESS;
         }
 
 
-        void ConfigHeapSession()
+        ULONG ConfigHeapSession()
         {
             PEVENT_TRACE_PROPERTIES pTraceProperties = etwProperties();
 
@@ -318,15 +419,70 @@ namespace ETWLib
             if (m_mode == LogFileMode)
                 pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL | EVENT_TRACE_INDEPENDENT_SESSION_MODE;
 
-            if (KernelModeProviders.size() > 0)
-                pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
 
             pTraceProperties->Wnode.ClientContext = 1;
             pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
             pTraceProperties->Wnode.Guid = HeapGuid;
 
+            ConfigPropertyBufferSize();
+            pTraceProperties->AgeLimit = 15;
 
+            int processCount = 0;
+            for (int i = 0; i < MAX_PROCESS_NUMBER; i++)
+            {
+                if (ProcessIDs[i] == 0)
+                    break;
+                else
+                    processCount++;
+            }
 
+            if (processCount == 0)
+                return ERROR_INVALID_PARAMETER;
+
+            ExtHeader processBufferHeader;
+            processBufferHeader.number = 1 + processCount;
+            processBufferHeader.flag = EXT_BUFFER_PROCESS;
+
+            std::vector<ULONG> events;
+            events.reserve(MAX_PROCESS_NUMBER);
+
+            for (unsigned int i = 0; i < KernelModeProviders.size(); i++)
+            {
+                if (KernelModeProviders[i].guid == HeapGuid
+                    && KernelModeProviders[i].stackwalk)
+                    events.push_back(KernelModeProviders[i].eventId);
+            }
+
+            ExtHeader stackWalkerHeader;
+            stackWalkerHeader.number = 1 + events.size();
+            stackWalkerHeader.flag = EXT_BUFFER_STACKWALK;
+            
+            TraceExtension extBuffer;
+            ExtHeader extHeader;
+            extHeader.number = 1 + processBufferHeader.number;
+            extHeader.flag = 1;
+
+            if (stackWalkerHeader.number > 1)
+            {
+                extHeader.number += stackWalkerHeader.number;
+                extHeader.flag += 1;
+            }
+
+            extBuffer.AppendItem(0, extHeader, nullptr);
+            extBuffer.AppendItem(1, processBufferHeader, ProcessIDs);
+            if (stackWalkerHeader.number > 1)
+                extBuffer.AppendItem(1 + processBufferHeader.number, stackWalkerHeader, events.data());
+
+            FlagExtension fgExt;
+            fgExt.offset = m_extensionOffset;
+            fgExt.length = 0xff;
+            fgExt.flag = 0x80;
+
+            std::memcpy(&(pTraceProperties->EnableFlags), &fgExt, sizeof(pTraceProperties->EnableFlags));
+            std::memcpy(m_etwPropertiesBuffer.data() + m_extensionOffset, extBuffer.data, sizeof(ULONG) * EXTENSION_SIZE); 
+
+            return ERROR_SUCCESS;
+            
         }
     };
 
@@ -417,6 +573,11 @@ namespace ETWLib
 
             PEVENT_TRACE_PROPERTIES pTraceProperties = m_context.etwProperties();
 
+#if 1
+            ULONG status = m_context.ConfigSession();
+            if (status != ERROR_SUCCESS)
+                return status;
+#else
             if (m_context.m_mode == RealTimeMode)
                 pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
 
@@ -433,9 +594,10 @@ namespace ETWLib
             pTraceProperties->BufferSize = m_context.BufferSize;
             pTraceProperties->MinimumBuffers = m_context.MinBuffers;
             pTraceProperties->MaximumBuffers = m_context.MaxBuffers;
+#endif
 
 
-            ULONG status = StartTraceW(&(m_context.m_traceHandle), m_context.m_sessionName.c_str(), pTraceProperties);
+            status = StartTraceW(&(m_context.m_traceHandle), m_context.m_sessionName.c_str(), pTraceProperties);
             return status;
         }
 
@@ -457,6 +619,9 @@ namespace ETWLib
         {
             if (m_context.m_traceHandle == 0)
                 return ERROR_INVALID_HANDLE;
+
+            if (m_context.Type != NormalSession)
+                return ERROR_SUCCESS;
 
             std::vector<CLASSIC_EVENT_ID> kernelEvents;
             for (auto& instance : m_context.KernelModeProviders)
@@ -489,6 +654,9 @@ namespace ETWLib
         {
             if (m_context.m_traceHandle == 0)
                 return ERROR_INVALID_HANDLE;
+
+            if (m_context.Type != NormalSession)
+                return ERROR_SUCCESS;
 
             ULONG status = ERROR_SUCCESS;
             for (auto& instance : m_context.UserModeProviders)

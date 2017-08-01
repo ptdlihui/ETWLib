@@ -9,12 +9,18 @@
 #define MAX_LOG_FILE_PATH_LENGTH 1024
 #define MAX_PROCESS_NUMBER 8
 
+#define ProcessCreate 0x0301
+#define ProcessDelete 0x0302
+#define Profile 0x0f2e
+
 // Heap event
 #define HeapCreate 0x1020
 #define HeapAlloc 0x1021
 #define HeapRealloc 0x1022
 #define HeapDestroy 0x1023
 #define HeapFree 0x1024
+
+
 
 
 namespace ETWLib
@@ -58,6 +64,7 @@ namespace ETWLib
         Thread = 11,
         Udplp = 12,
         Heap = 13,
+        Kernel = 14,
         KMPCount
     };
 
