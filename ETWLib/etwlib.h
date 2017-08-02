@@ -4,11 +4,24 @@
 #include <vector>
 #include <windows.h>
 
-#define EVENT_TRACE_TYPE_PERFSAMPLE 46
 #define MAX_SESSION_COUNT 64
 #define MAX_SESSION_NAME 1024
 #define MAX_LOG_FILE_PATH_LENGTH 1024
 #define MAX_PROCESS_NUMBER 8
+
+#define ProcessCreate 0x0301
+#define ProcessDelete 0x0302
+#define Profile 0x0f2e
+
+// Heap event
+#define HeapCreate 0x1020
+#define HeapAlloc 0x1021
+#define HeapRealloc 0x1022
+#define HeapDestroy 0x1023
+#define HeapFree 0x1024
+
+
+
 
 namespace ETWLib
 {
@@ -51,23 +64,30 @@ namespace ETWLib
         Thread = 11,
         Udplp = 12,
         Heap = 13,
+        Kernel = 14,
         KMPCount
     };
 
     struct ProviderEnableParameters
     {
         GUID guid;
-        unsigned char eventId;
+        unsigned short eventId;
         bool stackwalk;
         DWORD processID[MAX_PROCESS_NUMBER];
     };
 
+    enum SessionType
+    {
+        NormalSession = 0,
+        HeapSession = 1, 
+        BaseSession = 2
+    };
 
     struct SessionParameters
     {
-        SessionParameters();
+        SessionParameters(SessionType type = NormalSession);
         void EnableProfilling(bool profillingEnable);
-		void AddKernelModeProvider(KernelModeProviderFlag, unsigned char eventid, bool stack);
+		void AddKernelModeProvider(KernelModeProviderFlag, unsigned short eventid, bool stack);
 		void EraseKernelModeProvider(KernelModeProviderFlag);
 
         void AddUserModeProvider(std::wstring, bool stack, TraceLevel level = LevelVerbose, DWORD* pProcessIDs = nullptr, unsigned int count = 0);
@@ -80,7 +100,12 @@ namespace ETWLib
         ULONG BufferSize = 1024;
         ULONG MinBuffers = 64;
         ULONG MaxBuffers = 1024;
+
+        const SessionType Type = NormalSession;
+        ULONG ProcessIDs[MAX_PROCESS_NUMBER]; // Only work for heapSession up to now
     };
+
+    
 
     struct SessionInfo : public SessionParameters
     {

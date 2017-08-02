@@ -55,6 +55,7 @@ namespace ETWLib
         case Thread: return ThreadGuid;
         case Udplp: return UdpIpGuid;
         case Heap: return HeapGuid;
+        case Kernel: return KernelGuid;
         default:
             return GUID();
         }
