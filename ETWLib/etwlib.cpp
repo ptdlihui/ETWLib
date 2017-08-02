@@ -123,13 +123,13 @@ namespace ETWLib
     }
 
     SessionParameters::SessionParameters(SessionType type)
+        : Type(type)
     {
         std::memset(EnableKernelFlags, 0, sizeof(EnableKernelFlags));
         if (type == NormalSession)
             EnableKernelFlags[0] = EVENT_TRACE_FLAG_PROCESS | EVENT_TRACE_FLAG_THREAD | EVENT_TRACE_FLAG_IMAGE_LOAD | EVENT_TRACE_FLAG_VIRTUAL_ALLOC;
         
         std::memset(ProcessIDs, 0, sizeof(ProcessIDs));
-        Type = type;
     }
 
     void
@@ -239,7 +239,7 @@ namespace ETWLib
             MinBuffers = params.MinBuffers;
             MaxBuffers = params.MaxBuffers;
 
-            Type = params.Type;
+            std::memcpy(const_cast<SessionType*>(&Type), &(params.Type), sizeof(Type));
             std::memcpy(ProcessIDs, params.ProcessIDs, sizeof(ProcessIDs));
             if (Type == BaseSession)
             {
@@ -573,29 +573,9 @@ namespace ETWLib
 
             PEVENT_TRACE_PROPERTIES pTraceProperties = m_context.etwProperties();
 
-#if 1
             ULONG status = m_context.ConfigSession();
             if (status != ERROR_SUCCESS)
                 return status;
-#else
-            if (m_context.m_mode == RealTimeMode)
-                pTraceProperties->LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
-
-            if (m_context.m_mode == LogFileMode)
-                pTraceProperties->LogFileMode |= EVENT_TRACE_FILE_MODE_SEQUENTIAL;
-
-            if (m_context.KernelModeProviders.size() > 0)
-                pTraceProperties->LogFileMode |= EVENT_TRACE_SYSTEM_LOGGER_MODE;
-
-            pTraceProperties->Wnode.ClientContext = 1;
-            pTraceProperties->Wnode.Flags = WNODE_FLAG_TRACED_GUID;
-
-            pTraceProperties->MaximumFileSize = m_context.MaxETLFileSize;
-            pTraceProperties->BufferSize = m_context.BufferSize;
-            pTraceProperties->MinimumBuffers = m_context.MinBuffers;
-            pTraceProperties->MaximumBuffers = m_context.MaxBuffers;
-#endif
-
 
             status = StartTraceW(&(m_context.m_traceHandle), m_context.m_sessionName.c_str(), pTraceProperties);
             return status;

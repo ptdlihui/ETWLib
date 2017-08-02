@@ -101,7 +101,7 @@ namespace ETWLib
         ULONG MinBuffers = 64;
         ULONG MaxBuffers = 1024;
 
-        SessionType Type = NormalSession;
+        const SessionType Type = NormalSession;
         ULONG ProcessIDs[MAX_PROCESS_NUMBER]; // Only work for heapSession up to now
     };
 
